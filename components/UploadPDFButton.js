@@ -3,47 +3,56 @@ import { TouchableOpacity, Text, Alert, StyleSheet } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import { ThemeContext } from "../theme/ThemeContext";
+import CalendarioStore from "../CalendarioStore";
 
-const UploadPDFButton = ({ onFileSelected, onDataExtracted }) => {
+const UploadPDFButton = ({ onFileSelected }) => {
   const { theme } = useContext(ThemeContext);
 
   const uploadFileToBackend = async (fileUri) => {
     try {
-        const formData = new FormData();
-        formData.append("file", {
-            uri: fileUri,
-            name: "documento.pdf",
-            type: "application/pdf",
-        });
-
-        console.log("📤 Inizio upload...", fileUri);
-
-        const response = await fetch("http://192.168.11.174:3000/upload", {
-            method: "POST",  // ⚠️ Assicurati che sia POST, non GET!
-            headers: {
-                "Content-Type": "multipart/form-data",
-            },
-            body: formData,  // ⚠️ Il body deve essere incluso solo per POST
-        });
-
-        console.log("📡 Risposta ricevuta dal server:", response);
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Errore nel caricamento: ${errorText}`);
+      const formData = new FormData();
+      formData.append("file", {
+        uri: fileUri,
+        name: "documento.pdf",
+        type: "application/pdf",
+      });
+      
+      console.log("📤 Inizio upload...", fileUri);
+      
+      const response = await fetch("https://serverfnb.onrender.com/upload", {
+        method: "POST",
+        body: formData,
+        headers: {
+          "Content-Type": "multipart/form-data",
         }
-
-        const jsonData = await response.json();
-        console.log("📌 Dati ricevuti:", jsonData);
-        onDataExtracted(jsonData.text);
+      });
+      
+      console.log("📡 Risposta ricevuta dal server:", response);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Errore nel caricamento: ${errorText}`);
+      }
+      
+      // Parse the response as JSON
+      const jsonData = await response.json();
+      console.log("📌 Dati ricevuti:", jsonData);
+      
+      // Check if the response was successful
+      if (jsonData.success) {
+        // Store just the data field in our global store
+        CalendarioStore.setData(jsonData.data);
+        Alert.alert("Completato", "Dati dei turni caricati con successo!");
+      } else {
+        // Handle unsuccessful response
+        throw new Error(jsonData.message || "Errore non specificato nell'elaborazione");
+      }
+      
     } catch (error) {
-        console.error("❌ Errore nell'upload:", error);
-        Alert.alert("Errore", "Impossibile elaborare il file PDF.");
+      console.error("❌ Errore nell'upload:", error);
+      Alert.alert("Errore", `Impossibile elaborare il file PDF: ${error.message}`);
     }
-};
-
-
-  
+  };
 
   const pickDocument = async () => {
     try {
@@ -57,18 +66,24 @@ const UploadPDFButton = ({ onFileSelected, onDataExtracted }) => {
       }
 
       const fileUri = result.assets[0].uri;
-      const newPath = FileSystem.documentDirectory + "turni_mensili.pdf";
-
+      const tempPath = FileSystem.documentDirectory + "temp_turni.pdf";
+      
+      // Copiamo temporaneamente il file per poterlo inviare al server
       await FileSystem.copyAsync({
         from: fileUri,
-        to: newPath,
+        to: tempPath,
       });
-
-      Alert.alert("File caricato!", "Il file è stato salvato con successo.");
-      onFileSelected(newPath);
-
+      
+      if (onFileSelected) {
+        onFileSelected(tempPath);
+      }
+      
       // Invia il file al backend
-      await uploadFileToBackend(newPath);
+      await uploadFileToBackend(tempPath);
+      
+      // Elimina il file temporaneo dopo l'upload
+      await FileSystem.deleteAsync(tempPath, { idempotent: true });
+      
     } catch (error) {
       console.error("❌ Errore nel caricamento del file:", error);
       Alert.alert("Errore", "Impossibile caricare il file.");
@@ -76,7 +91,10 @@ const UploadPDFButton = ({ onFileSelected, onDataExtracted }) => {
   };
 
   return (
-    <TouchableOpacity style={[styles.button, { backgroundColor: theme.primary }]} onPress={pickDocument}>
+    <TouchableOpacity 
+      style={[styles.button, { backgroundColor: theme.primary }]} 
+      onPress={pickDocument}
+    >
       <Text style={styles.buttonText}>Carica PDF Turni</Text>
     </TouchableOpacity>
   );
