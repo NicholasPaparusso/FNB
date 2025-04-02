@@ -14,6 +14,7 @@ import {
 import { Calendar, LocaleConfig } from "react-native-calendars";
 import { ThemeContext } from "../theme/ThemeContext";
 import Icon from "react-native-vector-icons/FontAwesome"; // Importa FontAwesome
+import CalendarioStore from "../CalendarioStore";
 
 // Configurazione in italiano per il calendario
 LocaleConfig.locales["it"] = {
@@ -36,9 +37,6 @@ LocaleConfig.locales["it"] = {
 };
 LocaleConfig.defaultLocale = "it";
 
-// Importa il JSON (asset statico)
-import calendarioData from "../calendario_finale.json";
-
 // Array per i nomi dei mesi in italiano (per la formattazione della data)
 const italianMonthNames = [
   "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio",
@@ -56,6 +54,7 @@ const formatDateItalian = (dateStr) => {
 
 const Calendario = () => {
   const { theme } = useContext(ThemeContext);
+  
   const today = new Date();
   const currentYear = today.getFullYear();
   const currentMonth = String(today.getMonth() + 1).padStart(2, "0");
@@ -67,18 +66,36 @@ const Calendario = () => {
   const [searchText, setSearchText] = useState("");
   const [persons, setPersons] = useState([]);
   const [selectedTurnInfo, setSelectedTurnInfo] = useState(null);
+  const [calendarioData, setCalendarioData] = useState(CalendarioStore.getData());
+
+  // Subscribe to changes in the store
+  useEffect(() => {
+    const unsubscribe = CalendarioStore.subscribe((data) => {
+      setCalendarioData(JSON.parse(data));
+    });
+    
+    // Initialize with current data
+    setCalendarioData(CalendarioStore.getData());
+    
+    // Cleanup subscription when component unmounts
+    return () => unsubscribe();
+  }, []);
 
   // Inizializza la lista delle persone dal JSON
   useEffect(() => {
-    const keys = Object.keys(calendarioData);
-    setPersons(keys);
-    if (keys.length > 0) {
-      setSelectedPerson(keys[0]);
+    if (calendarioData && Object.keys(calendarioData).length > 0) {
+      const keys = Object.keys(calendarioData);
+      setPersons(keys);
+      if (keys.length > 0) {
+        setSelectedPerson(keys[0]);
+      }
     }
-  }, []);
+  }, [calendarioData]);
 
   // Filtra i turni per il mese corrente per la persona selezionata
   const getTurnsForCurrentMonth = useCallback(() => {
+    if (!calendarioData || !selectedPerson) return {};
+    
     const turns = calendarioData[selectedPerson] || {};
     const filtered = {};
     Object.keys(turns).forEach((dateStr) => {
@@ -87,7 +104,7 @@ const Calendario = () => {
       }
     });
     return filtered;
-  }, [selectedPerson, currentYear, currentMonth]);
+  }, [selectedPerson, currentYear, currentMonth, calendarioData]);
 
   const turnsMapping = getTurnsForCurrentMonth();
 
