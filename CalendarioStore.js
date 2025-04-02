@@ -20,7 +20,7 @@ const CalendarioStore = {
         }
       } else {
         this.data = newData;
-      }
+      } 
       
       this.notifyListeners();
     },
